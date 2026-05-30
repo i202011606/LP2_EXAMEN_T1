@@ -3,6 +3,7 @@ package gui;
 import java.awt.EventQueue;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.time.LocalDate;
 
 import javax.swing.JButton;
 import javax.swing.JComboBox;
@@ -13,6 +14,12 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.JTextArea;
 import java.awt.Font;
+import java.util.List;
+import javax.persistence.EntityManager;
+
+import entities.Dentista;
+import entities.EquipoDental;
+import util.JPAUtil;
 
 public class DlgEquipoDental extends JDialog implements ActionListener {
 
@@ -42,7 +49,7 @@ public class DlgEquipoDental extends JDialog implements ActionListener {
 	private JScrollPane scrollPane;
 	private JTextArea txtSalida;
 
-	// Tipo de operación a procesar: Adicionar, Consultar, Modificar o Eliminar
+	// Tipo de operaciï¿½n a procesar: Adicionar, Consultar, Modificar o Eliminar
 	private int tipoOperacion;
 
 	// Constantes para los tipos de operaciones
@@ -104,11 +111,11 @@ public class DlgEquipoDental extends JDialog implements ActionListener {
 		txtNombre.setBounds(174, 35, 251, 23);
 		getContentPane().add(txtNombre);
 		txtNombre.setColumns(10);
-		
+
 		lblCosto = new JLabel("Costo :");
 		lblCosto.setBounds(10, 62, 149, 23);
 		getContentPane().add(lblCosto);
-		
+
 		txtCosto = new JTextField();
 		txtCosto.setEditable(false);
 		txtCosto.setColumns(10);
@@ -122,7 +129,7 @@ public class DlgEquipoDental extends JDialog implements ActionListener {
 		for (String estado : estados) {
 			cboEstados.addItem(estado);
 		}
-		
+
 		lblFechaAdquisicion = new JLabel("Fecha de adquisici\u00F3n:");
 		lblFechaAdquisicion.setBounds(10, 116, 162, 20);
 		getContentPane().add(lblFechaAdquisicion);
@@ -132,7 +139,7 @@ public class DlgEquipoDental extends JDialog implements ActionListener {
 		txtFechaAdquisicion.setBounds(174, 114, 146, 26);
 		getContentPane().add(txtFechaAdquisicion);
 		txtFechaAdquisicion.setColumns(10);
-		
+
 		cboDentistas = new JComboBox<Object>();
 		cboDentistas.setBounds(174, 143, 251, 26);
 		getContentPane().add(cboDentistas);
@@ -259,29 +266,141 @@ public class DlgEquipoDental extends JDialog implements ActionListener {
 
 	void cargarDentistas() {
 
+		EntityManager manager = JPAUtil.getEntityManager();
+		String jpql = "select d from Dentista d";
+
+		try {
+
+			List<Dentista> lstDentistas = manager.createQuery(jpql, Dentista.class).getResultList();
+			for (Dentista dentista : lstDentistas) {
+				cboDentistas.addItem(dentista);
+			}
+
+		} finally {
+
+			manager.clear();
+		}
 	}
 
 	void listar() {
 
+		EntityManager manager = JPAUtil.getEntityManager();
+		String jpql = "select e from EquipoDental e";
+
+		try {
+
+			List<EquipoDental> lstEquipos = manager.createQuery(jpql, EquipoDental.class).getResultList();
+
+			txtSalida.setText("");
+
+			for (EquipoDental e : lstEquipos) {
+
+				imprimir("Nro Equipo...........: " + e.getNroEquipo());
+				imprimir("Nombre...............: " + e.getNombre());
+				imprimir("Costo................: " + e.getCosto());
+				imprimir("Fecha de adquisiciÃ³n.: " + e.getFechaAdquisicion());
+				imprimir("Dentista.............: " + e.getDentista().getCop() + " - "+ e.getDentista().getNombreCompleto());
+				imprimir("Correo...............: " + e.getDentista().getCorreo());
+				imprimir("Especialidad.........: " + e.getDentista().getEspecialidad().getTitulo());
+				imprimir("Estado...............: " + e.getEstadoDescripcion());
+				imprimir("-----------------------------------------------------------");
+				imprimir();
+			}
+
+		} finally {
+
+			manager.clear();
+		}
 	}
 
 	void adicionar() {
 
+		String nombre = txtNombre.getText();
+		Double costo = Double.parseDouble(txtCosto.getText());
+		String estado = cboEstados.getSelectedItem().toString();
+		Dentista dentista = (Dentista) cboDentistas.getSelectedItem();
+		EntityManager manager = JPAUtil.getEntityManager();
+
+		try {
+
+			EquipoDental equipo = new EquipoDental(null, nombre, costo, LocalDate.now(), estado, dentista);
+			manager.getTransaction().begin();
+			manager.persist(equipo);
+			manager.getTransaction().commit();
+			mensajeInfo("Equipo Dental registrado");
+			limpiar();
+
+		} catch (Exception e) {
+
+			mensajeError("Hubo un error en la transacciÃ³n");
+			e.printStackTrace();
+
+		} finally {
+
+			manager.close();
+		}
 	}
-	
+
 	void buscar() {
 
+		Integer nroEquipo = Integer.parseInt(txtNroEquipo.getText());
+		EntityManager manager = JPAUtil.getEntityManager();
+
+		try {
+			EquipoDental equipo = manager.find(EquipoDental.class, nroEquipo);
+			if (equipo == null) {
+				mensajeAdvertencia("Equipo Dental no encontrado");
+				return;
+			}
+
+			txtNombre.setText(equipo.getNombre());
+			txtCosto.setText(equipo.getCosto() + "");
+			cboEstados.setSelectedItem(equipo.getEstado());
+			txtFechaAdquisicion.setText(equipo.getFechaAdquisicion() + "");
+			cboDentistas.setSelectedItem(equipo.getDentista());
+			habilitarOk();
+
+		} finally {
+
+			manager.close();
+		}
 	}
 
 	void modificar() {
 
+		Integer nroEquipo = Integer.parseInt(txtNroEquipo.getText());
+		String nombre = txtNombre.getText();
+		Double costo = Double.parseDouble(txtCosto.getText());
+		String estado = cboEstados.getSelectedItem().toString();
+		Dentista dentista = (Dentista) cboDentistas.getSelectedItem();
+		EntityManager manager = JPAUtil.getEntityManager();
+
+		try {
+
+			EquipoDental equipo = new EquipoDental(nroEquipo, nombre, costo,LocalDate.parse(txtFechaAdquisicion.getText()), estado, dentista);
+
+			manager.getTransaction().begin();
+			manager.merge(equipo);
+			manager.getTransaction().commit();
+			mensajeInfo("Equipo Dental actualizado");
+			limpiar();
+
+		} catch (Exception e) {
+
+			mensajeError("Hubo un error en la transacciÃ³n");
+			e.printStackTrace();
+
+		} finally {
+
+			manager.close();
+		}
 	}
 
 	void eliminar() {
 
 	}
 
-	// Métodos tipo void (con parámetros)
+	// Mï¿½todos tipo void (con parï¿½metros)
 	void habilitarEntradas(boolean sino) {
 		txtNombre.setEditable(sino);
 		txtCosto.setEditable(sino);
@@ -321,7 +440,7 @@ public class DlgEquipoDental extends JDialog implements ActionListener {
 	void mensajeInfo(String msj) {
 		mensaje(msj, "INFO", JOptionPane.INFORMATION_MESSAGE);
 	}
-	
+
 	void mensajeAdvertencia(String msj) {
 		mensaje(msj, "ADVERTENCIA", JOptionPane.WARNING_MESSAGE);
 	}
